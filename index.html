@@ -1,0 +1,904 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ZSC3D AI五子棋</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: white;
+            overflow: hidden;
+            height: 100vh;
+            width: 100vw;
+            touch-action: none;
+        }
+        
+        #gameCanvas {
+            width: 100%;
+            height: 100%;
+            position: fixed;
+            top: 0;
+            left: 0;
+        }
+        
+        .game-ui {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            padding: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 10;
+            background: rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(5px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .status {
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: white;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+            padding: 8px 15px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+        }
+        
+        .controls {
+            display: flex;
+            gap: 10px;
+        }
+        
+        button {
+            padding: 8px 15px;
+            background: rgba(76, 175, 80, 0.8);
+            border: none;
+            border-radius: 5px;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+            backdrop-filter: blur(5px);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        button:hover {
+            background: rgba(69, 160, 73, 0.9);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 8px rgba(0, 0, 0, 0.15);
+        }
+        
+        .confirm-btn {
+            background: rgba(33, 150, 243, 0.8);
+            display: none;
+        }
+        
+        .instructions {
+            position: absolute;
+            bottom: 10px;
+            left: 0;
+            width: 100%;
+            text-align: center;
+            font-size: 0.9rem;
+            color: rgba(255, 255, 255, 0.7);
+            padding: 5px;
+        }
+        
+        .game-over {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.85);
+            padding: 30px 50px;
+            border-radius: 15px;
+            text-align: center;
+            z-index: 20;
+            display: none;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            min-width: 300px;
+        }
+        
+        .game-over h2 {
+            margin-bottom: 20px;
+            font-size: 2rem;
+            color: #4CAF50;
+        }
+        
+        .piece-count {
+            position: absolute;
+            top: 80px;
+            right: 15px;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            backdrop-filter: blur(5px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .player-info {
+            position: absolute;
+            top: 80px;
+            left: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        
+        .player {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 15px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            font-size: 0.9rem;
+        }
+        
+        .player.active {
+            background: rgba(76, 175, 80, 0.3);
+            border: 1px solid rgba(76, 175, 80, 0.5);
+        }
+        
+        .player-icon {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+        }
+        
+        .player-black .player-icon {
+            background: #111;
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
+        }
+        
+        .player-white .player-icon {
+            background: #eee;
+            box-shadow: 0 0 5px rgba(255, 255, 255, 0.5);
+        }
+        
+        @media (max-width: 768px) {
+            .game-ui {
+                padding: 10px;
+                flex-direction: column;
+                gap: 10px;
+            }
+            
+            .status {
+                font-size: 1rem;
+            }
+            
+            button {
+                padding: 6px 12px;
+                font-size: 0.9rem;
+            }
+            
+            .piece-count, .player-info {
+                top: 130px;
+            }
+            
+            .game-over {
+                padding: 20px 30px;
+                min-width: 250px;
+            }
+            
+            .game-over h2 {
+                font-size: 1.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="game-ui">
+        <div class="status" id="status">轮到你了（黑子）</div>
+        <div class="controls">
+            <button id="hintBtn">提示</button>
+            <button id="confirmBtn" class="confirm-btn">确认落子</button>
+            <button id="restartBtn">重新开始</button>
+        </div>
+    </div>
+    
+    <div class="player-info">
+        <div class="player player-black active" id="playerBlack">
+            <div class="player-icon"></div>
+            <span>玩家 (黑)</span>
+        </div>
+        <div class="player player-white" id="playerWhite">
+            <div class="player-icon"></div>
+            <span>AI (白)</span>
+        </div>
+    </div>
+    
+    <div class="piece-count" id="pieceCount">棋子: 0</div>
+    
+    <div id="gameCanvas"></div>
+    
+    <div class="instructions">
+        点击棋盘放置棋子，双指缩放视图
+    </div>
+    
+    <div class="game-over" id="gameOver">
+        <h2 id="gameOverText">游戏结束</h2>
+        <button id="playAgainBtn">再玩一次</button>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // 游戏状态
+        const gameState = {
+            board: Array(15).fill().map(() => Array(15).fill(0)),
+            currentPlayer: 1,
+            gameOver: false,
+            scene: null,
+            camera: null,
+            renderer: null,
+            raycaster: null,
+            mouse: null,
+            boardMesh: null,
+            pieces: [],
+            boardSize: 14,
+            pieceRadius: 0.4,
+            cameraDistance: 25,
+            cameraAngleX: Math.PI / 3.5, // 固定视角，类似2.5D效果
+            cameraAngleY: Math.PI / 4,
+            isDragging: false,
+            previousTouchDistance: null,
+            minCameraDistance: 15,
+            maxCameraDistance: 35,
+            lastTouchX: 0,
+            lastTouchY: 0,
+            isTouchMoving: false,
+            previewPiece: null,
+            selectedRow: -1,
+            selectedCol: -1
+        };
+
+        // 初始化游戏
+        function init() {
+            // 创建场景
+            gameState.scene = new THREE.Scene();
+            gameState.scene.background = new THREE.Color(0x1a1a2e);
+            
+            // 创建相机 - 使用固定视角
+            const aspect = window.innerWidth / window.innerHeight;
+            gameState.camera = new THREE.PerspectiveCamera(45, aspect, 0.1, 1000);
+            updateCameraPosition();
+            
+            // 创建渲染器
+            gameState.renderer = new THREE.WebGLRenderer({ 
+                antialias: true,
+                alpha: false,
+                powerPreference: "high-performance"
+            });
+            gameState.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            gameState.renderer.setSize(window.innerWidth, window.innerHeight);
+            gameState.renderer.shadowMap.enabled = true;
+            gameState.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            gameState.renderer.setClearColor(0x1a1a2e, 1);
+            document.getElementById('gameCanvas').appendChild(gameState.renderer.domElement);
+            
+            // 光线投射和鼠标交互
+            gameState.raycaster = new THREE.Raycaster();
+            gameState.mouse = new THREE.Vector2();
+            
+            // 添加灯光 - 简化灯光系统
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            gameState.scene.add(ambientLight);
+            
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(10, 15, 10);
+            directionalLight.castShadow = true;
+            directionalLight.shadow.mapSize.width = 1024;
+            directionalLight.shadow.mapSize.height = 1024;
+            gameState.scene.add(directionalLight);
+            
+            // 创建棋盘
+            createBoard();
+            
+            // 添加事件监听器
+            window.addEventListener('resize', onWindowResize);
+            gameState.renderer.domElement.addEventListener('click', onCanvasClick);
+            
+            // 触摸事件
+            gameState.renderer.domElement.addEventListener('touchstart', onTouchStart, { passive: false });
+            gameState.renderer.domElement.addEventListener('touchmove', onTouchMove, { passive: false });
+            gameState.renderer.domElement.addEventListener('touchend', onTouchEnd);
+            
+            // 按钮事件
+            document.getElementById('restartBtn').addEventListener('click', restartGame);
+            document.getElementById('hintBtn').addEventListener('click', showHint);
+            document.getElementById('playAgainBtn').addEventListener('click', restartGame);
+            document.getElementById('confirmBtn').addEventListener('click', confirmPlacement);
+            
+            // 更新玩家状态显示
+            updatePlayerDisplay();
+            
+            // 开始动画循环
+            animate();
+        }
+        
+        // 创建棋盘
+        function createBoard() {
+            // 棋盘底座
+            const boardGeometry = new THREE.BoxGeometry(gameState.boardSize + 2, 0.3, gameState.boardSize + 2);
+            const boardMaterial = new THREE.MeshLambertMaterial({ 
+                color: 0x5d4037
+            });
+            const boardBase = new THREE.Mesh(boardGeometry, boardMaterial);
+            boardBase.position.y = -0.15;
+            boardBase.receiveShadow = true;
+            gameState.scene.add(boardBase);
+            
+            // 棋盘表面
+            const surfaceGeometry = new THREE.PlaneGeometry(gameState.boardSize, gameState.boardSize);
+            const surfaceMaterial = new THREE.MeshLambertMaterial({ 
+                color: 0xe6b17e
+            });
+            gameState.boardMesh = new THREE.Mesh(surfaceGeometry, surfaceMaterial);
+            gameState.boardMesh.rotation.x = -Math.PI / 2;
+            gameState.boardMesh.position.y = 0.01;
+            gameState.boardMesh.receiveShadow = true;
+            gameState.scene.add(gameState.boardMesh);
+            
+            // 添加棋盘网格线
+            const gridMaterial = new THREE.LineBasicMaterial({ color: 0x000000 });
+            
+            for (let i = 0; i <= gameState.boardSize; i++) {
+                const offset = -gameState.boardSize / 2;
+                
+                // 水平线
+                const pointsH = [];
+                pointsH.push(new THREE.Vector3(offset, 0.02, offset + i));
+                pointsH.push(new THREE.Vector3(-offset, 0.02, offset + i));
+                
+                const geometryH = new THREE.BufferGeometry().setFromPoints(pointsH);
+                const lineH = new THREE.Line(geometryH, gridMaterial);
+                gameState.scene.add(lineH);
+                
+                // 垂直线
+                const pointsV = [];
+                pointsV.push(new THREE.Vector3(offset + i, 0.02, offset));
+                pointsV.push(new THREE.Vector3(offset + i, 0.02, -offset));
+                
+                const geometryV = new THREE.BufferGeometry().setFromPoints(pointsV);
+                const lineV = new THREE.Line(geometryV, gridMaterial);
+                gameState.scene.add(lineV);
+            }
+            
+            // 添加棋盘边框
+            const borderGeometry = new THREE.BoxGeometry(gameState.boardSize + 0.2, 0.5, gameState.boardSize + 0.2);
+            const borderMaterial = new THREE.MeshLambertMaterial({ color: 0x3e2723 });
+            const border = new THREE.Mesh(borderGeometry, borderMaterial);
+            border.position.y = -0.25;
+            gameState.scene.add(border);
+        }
+        
+        // 放置棋子预览
+        function showPreviewPiece(row, col) {
+            // 移除之前的预览
+            if (gameState.previewPiece) {
+                gameState.scene.remove(gameState.previewPiece);
+            }
+            
+            // 创建预览棋子 - 使用圆盘而不是圆柱体，更符合2.5D风格
+            const pieceGeometry = new THREE.CylinderGeometry(gameState.pieceRadius, gameState.pieceRadius, 0.2, 32);
+            const pieceMaterial = new THREE.MeshLambertMaterial({ 
+                color: gameState.currentPlayer === 1 ? 0x111111 : 0xeeeeee,
+                transparent: true,
+                opacity: 0.7
+            });
+            
+            const piece = new THREE.Mesh(pieceGeometry, pieceMaterial);
+            piece.position.set(
+                col - gameState.boardSize / 2,
+                0.1,
+                row - gameState.boardSize / 2
+            );
+            piece.castShadow = true;
+            gameState.scene.add(piece);
+            
+            gameState.previewPiece = piece;
+            gameState.selectedRow = row;
+            gameState.selectedCol = col;
+            
+            // 显示确认按钮
+            document.getElementById('confirmBtn').style.display = 'block';
+        }
+        
+        // 确认落子
+        function confirmPlacement() {
+            if (gameState.selectedRow === -1 || gameState.selectedCol === -1) return;
+            
+            placePiece(gameState.selectedRow, gameState.selectedCol);
+            
+            // 移除预览棋子
+            if (gameState.previewPiece) {
+                gameState.scene.remove(gameState.previewPiece);
+                gameState.previewPiece = null;
+            }
+            
+            // 隐藏确认按钮
+            document.getElementById('confirmBtn').style.display = 'none';
+            
+            // 重置选择
+            gameState.selectedRow = -1;
+            gameState.selectedCol = -1;
+        }
+        
+        // 放置棋子
+        function placePiece(row, col) {
+            if (gameState.gameOver || gameState.board[row][col] !== 0) {
+                return false;
+            }
+            
+            // 更新棋盘状态
+            gameState.board[row][col] = gameState.currentPlayer;
+            
+            // 创建棋子 - 使用圆盘形状
+            const pieceGeometry = new THREE.CylinderGeometry(gameState.pieceRadius, gameState.pieceRadius, 0.2, 32);
+            const pieceMaterial = new THREE.MeshLambertMaterial({ 
+                color: gameState.currentPlayer === 1 ? 0x111111 : 0xeeeeee
+            });
+            
+            const piece = new THREE.Mesh(pieceGeometry, pieceMaterial);
+            piece.position.set(
+                col - gameState.boardSize / 2,
+                0.1,
+                row - gameState.boardSize / 2
+            );
+            piece.castShadow = true;
+            piece.receiveShadow = true;
+            piece.scale.set(0.1, 0.1, 0.1);
+            gameState.scene.add(piece);
+            
+            // 存储棋子引用
+            gameState.pieces.push({ mesh: piece, row, col, player: gameState.currentPlayer });
+            
+            // 更新棋子计数
+            document.getElementById('pieceCount').textContent = `棋子: ${gameState.pieces.length}`;
+            
+            // 棋子放置动画
+            animatePiecePlacement(piece);
+            
+            // 检查胜负
+            if (checkWin(row, col, gameState.currentPlayer)) {
+                gameState.gameOver = true;
+                const winnerText = gameState.currentPlayer === 1 ? '你赢了！' : 'AI赢了！';
+                document.getElementById('status').textContent = winnerText;
+                document.getElementById('gameOverText').textContent = winnerText;
+                document.getElementById('gameOver').style.display = 'block';
+                return true;
+            }
+            
+            // 检查平局
+            if (gameState.pieces.length === 225) {
+                gameState.gameOver = true;
+                document.getElementById('status').textContent = '平局！';
+                document.getElementById('gameOverText').textContent = '平局！';
+                document.getElementById('gameOver').style.display = 'block';
+                return true;
+            }
+            
+            // 切换玩家
+            gameState.currentPlayer = gameState.currentPlayer === 1 ? 2 : 1;
+            document.getElementById('status').textContent = 
+                gameState.currentPlayer === 1 ? '轮到你了（黑子）' : 'AI思考中...';
+            
+            // 更新玩家显示
+            updatePlayerDisplay();
+            
+            // 如果是AI的回合
+            if (gameState.currentPlayer === 2 && !gameState.gameOver) {
+                setTimeout(aiMove, 800);
+            }
+            
+            return true;
+        }
+        
+        // 更新玩家显示
+        function updatePlayerDisplay() {
+            const playerBlack = document.getElementById('playerBlack');
+            const playerWhite = document.getElementById('playerWhite');
+            
+            if (gameState.currentPlayer === 1) {
+                playerBlack.classList.add('active');
+                playerWhite.classList.remove('active');
+            } else {
+                playerWhite.classList.add('active');
+                playerBlack.classList.remove('active');
+            }
+        }
+        
+        // 棋子放置动画
+        function animatePiecePlacement(piece) {
+            const scale = { x: 0.1, y: 0.1, z: 0.1 };
+            const targetScale = { x: 1, y: 1, z: 1 };
+            
+            const animation = () => {
+                scale.x += (targetScale.x - scale.x) * 0.2;
+                scale.y += (targetScale.y - scale.y) * 0.2;
+                scale.z += (targetScale.z - scale.z) * 0.2;
+                
+                piece.scale.set(scale.x, scale.y, scale.z);
+                
+                if (Math.abs(scale.x - targetScale.x) > 0.01) {
+                    requestAnimationFrame(animation);
+                }
+            };
+            
+            animation();
+        }
+        
+        // AI移动
+        function aiMove() {
+            if (gameState.gameOver) return;
+            
+            let bestScore = -Infinity;
+            let bestMove = null;
+            
+            for (let row = 0; row < 15; row++) {
+                for (let col = 0; col < 15; col++) {
+                    if (gameState.board[row][col] === 0) {
+                        const score = evaluatePosition(row, col);
+                        if (score > bestScore) {
+                            bestScore = score;
+                            bestMove = { row, col };
+                        }
+                    }
+                }
+            }
+            
+            if (bestMove) {
+                placePiece(bestMove.row, bestMove.col);
+            }
+        }
+        
+        // 评估位置得分
+        function evaluatePosition(row, col) {
+            let score = 0;
+            
+            gameState.board[row][col] = 2;
+            
+            if (checkWin(row, col, 2)) {
+                score += 10000;
+            }
+            
+            gameState.board[row][col] = 1;
+            if (checkWin(row, col, 1)) {
+                score += 5000;
+            }
+            gameState.board[row][col] = 0;
+            
+            const directions = [
+                [0, 1], [1, 0], [1, 1], [1, -1]
+            ];
+            
+            for (const [dx, dy] of directions) {
+                const line = getLine(row, col, dx, dy);
+                score += evaluateLine(line, 2);
+                score += evaluateLine(line, 1) * 0.5;
+            }
+            
+            const centerDist = Math.abs(row - 7) + Math.abs(col - 7);
+            score += (14 - centerDist) * 2;
+            
+            return score;
+        }
+        
+        // 获取一条线上的棋子情况
+        function getLine(row, col, dx, dy) {
+            const line = [];
+            
+            for (let i = -4; i <= 4; i++) {
+                const r = row + i * dx;
+                const c = col + i * dy;
+                
+                if (r >= 0 && r < 15 && c >= 0 && c < 15) {
+                    line.push(gameState.board[r][c]);
+                } else {
+                    line.push(-1);
+                }
+            }
+            
+            return line;
+        }
+        
+        // 评估一条线的得分
+        function evaluateLine(line, player) {
+            let score = 0;
+            const opponent = player === 1 ? 2 : 1;
+            
+            for (let i = 0; i <= line.length - 5; i++) {
+                const segment = line.slice(i, i + 5);
+                
+                const playerCount = segment.filter(cell => cell === player).length;
+                const opponentCount = segment.filter(cell => cell === opponent).length;
+                const emptyCount = segment.filter(cell => cell === 0).length;
+                
+                if (opponentCount > 0) continue;
+                
+                if (playerCount === 5) score += 100000;
+                else if (playerCount === 4 && emptyCount === 1) score += 1000;
+                else if (playerCount === 3 && emptyCount === 2) score += 100;
+                else if (playerCount === 2 && emptyCount === 3) score += 10;
+            }
+            
+            return score;
+        }
+        
+        // 检查是否获胜
+        function checkWin(row, col, player) {
+            const directions = [
+                [0, 1], [1, 0], [1, 1], [1, -1]
+            ];
+            
+            for (const [dx, dy] of directions) {
+                let count = 1;
+                
+                for (let i = 1; i < 5; i++) {
+                    const r = row + i * dx;
+                    const c = col + i * dy;
+                    
+                    if (r < 0 || r >= 15 || c < 0 || c >= 15 || gameState.board[r][c] !== player) {
+                        break;
+                    }
+                    
+                    count++;
+                }
+                
+                for (let i = 1; i < 5; i++) {
+                    const r = row - i * dx;
+                    const c = col - i * dy;
+                    
+                    if (r < 0 || r >= 15 || c < 0 || c >= 15 || gameState.board[r][c] !== player) {
+                        break;
+                    }
+                    
+                    count++;
+                }
+                
+                if (count >= 5) {
+                    return true;
+                }
+            }
+            
+            return false;
+        }
+        
+        // 显示提示
+        function showHint() {
+            if (gameState.gameOver || gameState.currentPlayer !== 1) return;
+            
+            let bestScore = -Infinity;
+            let bestMove = null;
+            
+            for (let row = 0; row < 15; row++) {
+                for (let col = 0; col < 15; col++) {
+                    if (gameState.board[row][col] === 0) {
+                        const score = evaluatePosition(row, col);
+                        if (score > bestScore) {
+                            bestScore = score;
+                            bestMove = { row, col };
+                        }
+                    }
+                }
+            }
+            
+            if (bestMove) {
+                const { row, col } = bestMove;
+                const hintGeometry = new THREE.RingGeometry(0.3, 0.5, 32);
+                const hintMaterial = new THREE.MeshBasicMaterial({ 
+                    color: 0xFFD700, 
+                    side: THREE.DoubleSide,
+                    transparent: true,
+                    opacity: 0.7
+                });
+                
+                const hint = new THREE.Mesh(hintGeometry, hintMaterial);
+                hint.position.set(
+                    col - gameState.boardSize / 2,
+                    0.15,
+                    row - gameState.boardSize / 2
+                );
+                hint.rotation.x = -Math.PI / 2;
+                gameState.scene.add(hint);
+                
+                setTimeout(() => {
+                    gameState.scene.remove(hint);
+                }, 3000);
+            }
+        }
+        
+        // 重新开始游戏
+        function restartGame() {
+            gameState.board = Array(15).fill().map(() => Array(15).fill(0));
+            gameState.currentPlayer = 1;
+            gameState.gameOver = false;
+            
+            gameState.pieces.forEach(piece => {
+                gameState.scene.remove(piece.mesh);
+            });
+            gameState.pieces = [];
+            
+            if (gameState.previewPiece) {
+                gameState.scene.remove(gameState.previewPiece);
+                gameState.previewPiece = null;
+            }
+            
+            document.getElementById('status').textContent = '轮到你了（黑子）';
+            document.getElementById('pieceCount').textContent = '棋子: 0';
+            document.getElementById('gameOver').style.display = 'none';
+            document.getElementById('confirmBtn').style.display = 'none';
+            
+            gameState.selectedRow = -1;
+            gameState.selectedCol = -1;
+            
+            // 重置相机到默认位置
+            gameState.cameraDistance = 25;
+            gameState.cameraAngleX = Math.PI / 3.5;
+            gameState.cameraAngleY = Math.PI / 4;
+            updateCameraPosition();
+            
+            // 更新玩家显示
+            updatePlayerDisplay();
+        }
+        
+        // 更新相机位置
+        function updateCameraPosition() {
+            const x = gameState.cameraDistance * Math.sin(gameState.cameraAngleX) * Math.cos(gameState.cameraAngleY);
+            const y = gameState.cameraDistance * Math.cos(gameState.cameraAngleX);
+            const z = gameState.cameraDistance * Math.sin(gameState.cameraAngleX) * Math.sin(gameState.cameraAngleY);
+            
+            gameState.camera.position.set(x, y, z);
+            gameState.camera.lookAt(0, 0, 0);
+        }
+        
+        // 处理画布点击事件
+        function onCanvasClick(event) {
+            if (gameState.currentPlayer !== 1 || gameState.gameOver) return;
+            
+            const rect = gameState.renderer.domElement.getBoundingClientRect();
+            gameState.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+            gameState.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+            
+            gameState.raycaster.setFromCamera(gameState.mouse, gameState.camera);
+            
+            const intersects = gameState.raycaster.intersectObject(gameState.boardMesh);
+            
+            if (intersects.length > 0) {
+                const point = intersects[0].point;
+                
+                const col = Math.round(point.x + gameState.boardSize / 2);
+                const row = Math.round(point.z + gameState.boardSize / 2);
+                
+                if (row >= 0 && row < 15 && col >= 0 && col < 15) {
+                    if (gameState.board[row][col] === 0) {
+                        showPreviewPiece(row, col);
+                    }
+                }
+            }
+        }
+        
+        // 处理触摸事件
+        function onTouchStart(event) {
+            event.preventDefault();
+            
+            if (event.touches.length === 1) {
+                // 处理落子
+                const touch = event.touches[0];
+                const rect = gameState.renderer.domElement.getBoundingClientRect();
+                gameState.mouse.x = ((touch.clientX - rect.left) / rect.width) * 2 - 1;
+                gameState.mouse.y = -((touch.clientY - rect.top) / rect.height) * 2 + 1;
+                
+                gameState.raycaster.setFromCamera(gameState.mouse, gameState.camera);
+                
+                const intersects = gameState.raycaster.intersectObject(gameState.boardMesh);
+                
+                if (intersects.length > 0) {
+                    const point = intersects[0].point;
+                    
+                    const col = Math.round(point.x + gameState.boardSize / 2);
+                    const row = Math.round(point.z + gameState.boardSize / 2);
+                    
+                    if (row >= 0 && row < 15 && col >= 0 && col < 15) {
+                        if (gameState.board[row][col] === 0) {
+                            showPreviewPiece(row, col);
+                        }
+                    }
+                }
+                
+                // 准备拖动
+                gameState.isTouchMoving = true;
+                gameState.lastTouchX = event.touches[0].clientX;
+                gameState.lastTouchY = event.touches[0].clientY;
+            } else if (event.touches.length === 2) {
+                const dx = event.touches[0].clientX - event.touches[1].clientX;
+                const dy = event.touches[0].clientY - event.touches[1].clientY;
+                gameState.previousTouchDistance = Math.sqrt(dx * dx + dy * dy);
+            }
+        }
+        
+        function onTouchMove(event) {
+            event.preventDefault();
+            
+            if (event.touches.length === 1 && gameState.isTouchMoving) {
+                const currentTouchX = event.touches[0].clientX;
+                const currentTouchY = event.touches[0].clientY;
+                
+                const deltaX = (currentTouchX - gameState.lastTouchX) * 0.01;
+                const deltaY = (currentTouchY - gameState.lastTouchY) * 0.01;
+                
+                // 限制视角旋转范围，保持2.5D效果
+                gameState.cameraAngleY += deltaX;
+                gameState.cameraAngleX = Math.max(
+                    Math.PI / 6,
+                    Math.min(Math.PI / 2.2, gameState.cameraAngleX - deltaY)
+                );
+                
+                updateCameraPosition();
+                
+                gameState.lastTouchX = currentTouchX;
+                gameState.lastTouchY = currentTouchY;
+            } else if (event.touches.length === 2) {
+                const dx = event.touches[0].clientX - event.touches[1].clientX;
+                const dy = event.touches[0].clientY - event.touches[1].clientY;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                if (gameState.previousTouchDistance !== null) {
+                    const zoomFactor = gameState.previousTouchDistance / distance;
+                    gameState.cameraDistance = Math.max(
+                        gameState.minCameraDistance,
+                        Math.min(gameState.maxCameraDistance, gameState.cameraDistance * zoomFactor)
+                    );
+                    
+                    updateCameraPosition();
+                }
+                
+                gameState.previousTouchDistance = distance;
+            }
+        }
+        
+        function onTouchEnd(event) {
+            if (event.touches.length === 0) {
+                gameState.isTouchMoving = false;
+                gameState.previousTouchDistance = null;
+            } else if (event.touches.length === 1) {
+                gameState.previousTouchDistance = null;
+                gameState.isTouchMoving = true;
+                gameState.lastTouchX = event.touches[0].clientX;
+                gameState.lastTouchY = event.touches[0].clientY;
+            }
+        }
+        
+        // 窗口大小调整
+        function onWindowResize() {
+            gameState.camera.aspect = window.innerWidth / window.innerHeight;
+            gameState.camera.updateProjectionMatrix();
+            gameState.renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+        
+        // 动画循环
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            // 2.5D效果下，不需要复杂的动画，只需渲染场景
+            gameState.renderer.render(gameState.scene, gameState.camera);
+        }
+        
+        // 页面加载完成后初始化游戏
+        window.addEventListener('load', init);
+    </script>
+</body>
+</html>
